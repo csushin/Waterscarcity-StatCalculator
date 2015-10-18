@@ -3,7 +3,7 @@
 import java.util.ArrayList;
 import java.util.Collections;
 
-public class CalcStatThread implements Runnable{
+public class CalcModalAttributesThread implements Runnable{
 	private String type;
 	private double[] popValue;
 	private double ratio;
@@ -14,9 +14,8 @@ public class CalcStatThread implements Runnable{
 	private int deltaY;
 	private int totalWidth;
 	private ArrayList<TiffParser> supplyParsers;
-	private TiffParser sParser;
 	
-	public CalcStatThread(String type, double ratio, double[] popValue, ArrayList<TiffParser> supplyParsers, int startHIndex, int endHIndex, int deltaX, int deltaY, int totalWidth, double[] bufferSet){
+	public CalcModalAttributesThread(String type, double ratio, double[] popValue, ArrayList<TiffParser> supplyParsers, int startHIndex, int endHIndex, int deltaX, int deltaY, int totalWidth, double[] bufferSet){
 		this.type = type;
 		this.popValue = popValue;
 		this.ratio = ratio;
@@ -29,7 +28,7 @@ public class CalcStatThread implements Runnable{
 		this.results = bufferSet;
 	}
 	
-	public CalcStatThread(String type, double ratio, double[] popValue, TiffParser sParser, int startHIndex, int endHIndex, int deltaX, int deltaY, int totalWidth, double[] bufferSet){
+	public CalcModalAttributesThread(String type, double ratio, double[] popValue, TiffParser sParser, int startHIndex, int endHIndex, int deltaX, int deltaY, int totalWidth, double[] bufferSet){
 		this.type = type;
 		this.popValue = popValue;
 		this.ratio = ratio;

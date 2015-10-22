@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/jdk1.7.0_72"/>
-	<classpathentry kind="lib" path="C:/Users/xing/git/Waterscarcity-StatCalculator/gdal.jar"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/jdk1.7.0_11"/>
+	<classpathentry kind="lib" path="E:/EclipseProjects/WaterScarcity-StatCalculator/gdal.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

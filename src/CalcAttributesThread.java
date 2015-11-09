@@ -1,5 +1,7 @@
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 
 
 public class CalcAttributesThread implements Runnable {
@@ -8,13 +10,18 @@ public class CalcAttributesThread implements Runnable {
 	private int endIndex;
 	private double[] results;
 	private ArrayList<TiffParser> parsers;
+	private String dataType;
+	private int binSize = 20;
+	private double[] minmax;
 	
-	public CalcAttributesThread(String type, int startIndex, int endIndex, ArrayList<TiffParser> parsers, double[] bufferSet){
+	public CalcAttributesThread(String dataType, String type, int startIndex, int endIndex, ArrayList<TiffParser> parsers, double[] bufferSet, double[] minmax){
 		this.type = type;
 		this.startIndex = startIndex;
 		this.endIndex = endIndex;
 		this.parsers = parsers;
 		this.results = bufferSet;
+		this.dataType = dataType;
+		this.minmax = minmax;
 	}
 	
 	public double[] getResults(){
@@ -26,6 +33,8 @@ public class CalcAttributesThread implements Runnable {
 			double[] scarcities = new double[parsers.size()];
 			for(int k=0; k<this.parsers.size(); k++){
 				scarcities[k] = this.parsers.get(k).getData()[i];
+				if(dataType.equals("Scarcity"))
+					scarcities[k] = categorizeScarcity(scarcities[k]);
 			}
 			if(type.equals("ModalMean") || type.equals("TimeMean")){
 				this.results[i] = computeTimeOrModalMean(scarcities);
@@ -33,20 +42,47 @@ public class CalcAttributesThread implements Runnable {
 			if(type.equals("ModalStd") || type.equals("TimeStd")){
 				this.results[i] = computeTimeOrModalStd(scarcities);
 			}
-			if(type.equals("ModalRMS") ||  type.equals("TimeRMS")){
+			if(type.equals("ModalEntropy") || type.equals("TimeEntropy")){
+				if(!this.dataType.equals("Scarcity"))
+					this.results[i] = computeTimeOrModalBinEntropy(scarcities, this.binSize);
+				else
+					this.results[i] = computeTimeOrModalCategoricalEntropy(scarcities);
+			}
+			if(type.equals("ModalCV") || type.equals("TimeCV")){
+				this.results[i] = computeTimeOrModalCV(scarcities);
+			}
+			if(type.equals("ModalRMS") || type.equals("TimeRMS")){
 				this.results[i] = computeTimeOrModalRMS(scarcities);
 			}
-			if(type.equals("ModalCV") || type.equals("ModalCV")){
-				this.results[i] = computeTimeOrModalCV(scarcities);
+			if(type.equals("ModalMedian") || type.equals("TimeMedian")){
+				this.results[i] = computeTimeOrModalMedian(scarcities);
+			}
+			if(type.equals("ModalIQR") || type.equals("TimeIQR")){
+				this.results[i] = computeTimeOrModalIQR(scarcities);
+			}
+			if(type.equals("ModalSpaceGradient") || type.equals("TimeSpaceGradient")){
+				
+			}
+			if(type.equals("ModalSkewness") || type.equals("TimeSkewness")){
+				this.results[i] = computeTimeOrModalSkewness(scarcities);
+			}
+			if(type.equals("ModalKurtosis") || type.equals("TimeKurtosis")){
+				this.results[i] = computeTimeOrModalKurtosis(scarcities);
+			}
+			if(type.equals("ModalQuadraticScore") || type.equals("TimeQuadraticScore")){
+				if(!this.dataType.equals("Scarcity"))
+					this.results[i] = computeTimeOrModalQuadraticScore_Continuous(scarcities, this.binSize);
+				else
+					this.results[i] = computeTimeOrModalQuadraticScore_Discrete(scarcities);
 			}
 		}
 	}
 	
-	private double computeTimeOrModalMean(double[] scarcities){
+	private double computeTimeOrModalMean(double[] values){
 		double total = 0;
 		double totalnum = 0;
-		for(double val : scarcities){
-			if(val == -1)
+		for(double val : values){
+			if(val == -1 || Double.isNaN(val))
 				continue;
 			totalnum++;
 			total+=val;
@@ -57,17 +93,17 @@ public class CalcAttributesThread implements Runnable {
 			return total/totalnum;
 	}
 	
-	private double computeTimeOrModalStd(double[] scarcities){
-		double mean = computeTimeOrModalMean(scarcities);
+	private double computeTimeOrModalStd(double[] values){
+		double mean = computeTimeOrModalMean(values);
 		if(mean == -1)
 			return -1;
 		else{
 			double sqrsum = 0;
 			double nonneg = 0;
-			for(int i=0; i<scarcities.length; i++){
-				if(scarcities[i] != -1){
+			for(int i=0; i<values.length; i++){
+				if(values[i] != -1 && !Double.isNaN(values[i])){
 					nonneg++;
-					sqrsum += Math.pow(scarcities[i]-mean, 2.0);
+					sqrsum+= Math.pow(values[i]-mean, 2.0);
 				}
 			}
 			if(nonneg == 0)
@@ -77,64 +113,218 @@ public class CalcAttributesThread implements Runnable {
 		}
 	}
 	
-	private double computeTimeOrModalRMS(double[] scarcities){
-		double mean = computeTimeOrModalMean(scarcities);
-		if(mean == -1)
-			return -1;
-		else{
-			double sqrsum = 0;
-			double nonneg = 0;
-			for(int i=0; i<scarcities.length; i++){
-				if(scarcities[i] != -1){
-					nonneg++;
-					sqrsum += Math.pow(scarcities[i], 2.0);
-				}
+	private double computeTimeOrModalBinEntropy(double[] values, int binSize){
+		double entropy = 0;
+		Arrays.sort(values);
+		double min = this.minmax[0];
+		double max = this.minmax[1];
+		double nonNaN = 0;
+		for(double value : values){
+			if(!Double.isNaN(value) && value!=-1){
+				nonNaN++;
 			}
-			if(nonneg == 0)
-				return -1;
-			else
-				return Math.sqrt(sqrsum/nonneg);	
 		}
+		if(nonNaN == 0)
+			return -1;
+		double interval = (max - min + 1)/binSize;
+		double[] binArrays = new double[(int) binSize];
+		for(double value : values){
+			if(!Double.isNaN(value) && value!=-1){
+				int index = (int) ((value - min)/interval);
+				binArrays[index]++;
+			}
+		}
+		double nonZeroBin = 0;
+		for(double each : binArrays){
+			double pr = each / nonNaN;
+			if(pr!=0){
+				entropy+=pr*Math.log(pr);
+				nonZeroBin++;
+			}
+		}
+		return -entropy/Math.log(nonZeroBin);
+		
 	}
 	
-	private double computeTimeOrModalCV(double[] scarcities){
-		double mean = computeTimeOrModalMean(scarcities);
-		if(mean == -1)
+	private double computeTimeOrModalCategoricalEntropy(double[] values){
+		int type = 4;
+		double[] occurences = new double[type];
+		double entropy = 0;
+		int nonNeg=0;
+		int totalType = 0;
+		for(double value : values){
+			if(value==-1  || Double.isNaN(value))
+				continue;
+//			int level = (int) categorizeScarcity(value);
+			occurences[(int) (value-1)]++;
+			nonNeg++;
+		}
+		if(nonNeg>0){
+			for(int i=0; i<type; i++){
+				if(occurences[i]>0){
+					occurences[i]=occurences[i]/(double)nonNeg;
+					entropy+=(occurences[i]*Math.log(occurences[i]));
+					totalType++;
+				}
+			}
+			entropy = -entropy;
+//			entropy = -entropy/Math.log(totalType);
+		}
+		else
+			entropy = -1;
+		return entropy;
+//		Normalize the entropy, referred to http://www.endmemo.com/bio/shannonentropy.php
+//		double MaxEntropy = Math.log(scarcities.length)/Math.log(nenNeg);
+//		return entropy/(MaxEntropy-0);
+	}
+	
+	private double computeTimeOrModalCV(double[] values){
+		double mean = computeTimeOrModalMean(values);
+		if(mean == -1 || mean == 0 || Double.isNaN(mean))
 			return -1;
-		double std = computeTimeOrModalStd(scarcities);
-		if(std == -1)
+		double std = computeTimeOrModalStd(values);
+		if(std == -1|| Double.isNaN(std))
 			return -1;
 		return std/mean;
 	}
 	
-	private double computeTimeOrModalEntropy(double[] scarcities){
-		int type = 4;
-		double[] occurences = new double[type];
-		double entropy = 0;
-		double nonzero = 0;
-		for(double val : scarcities){
-			if(val>1700)
-				occurences[3]++;
-			if(val<=1700 && val>1000)
-				occurences[2]++;
-			if(val<=1000 && val>500)
-				occurences[1]++;
-			if(val<=500 && val>0)
-				occurences[0]++;
-		}
-		occurences[0] = occurences[0]/scarcities.length;
-		occurences[1] = occurences[1]/scarcities.length;
-		occurences[2] = occurences[2]/scarcities.length;
-		occurences[3] = occurences[3]/scarcities.length;
-		for(int i=0; i<occurences.length; i++){
-			if(occurences[i]!=0){
-				entropy+=occurences[i]*Math.log(occurences[i]);
-				nonzero++;
+	private double computeTimeOrModalRMS(double[] values){
+		double sqrsum = 0;
+		double nonneg = 0;
+		for(int i=0; i<values.length; i++){
+			if(values[i] != -1 && !Double.isNaN(values[i])){
+				nonneg++;
+				sqrsum+= Math.pow(values[i], 2.0);
 			}
 		}
-		entropy = entropy/Math.log(nonzero);
-		double MaxEntropy = Math.log(scarcities.length)/Math.log(nonzero);
-		return entropy/(MaxEntropy-0);
+		if(nonneg == 0)
+			return -1;
+		else
+			return Math.sqrt(sqrsum/nonneg);	
 	}
+	
+	
+//	output continuous scarcity value to categories from 1~4
+	private double categorizeScarcity(double scarcity){
+		if(scarcity<=500 && scarcity>=0) {return 1;}
+		else if(scarcity>500 && scarcity<=1000) {return 2;}
+		else if(scarcity>1000 && scarcity<=1700) {return 3;}
+		else if(scarcity>1700)	{return 4;}
+		return -1;
+	}
+	
+	private double computeTimeOrModalKurtosis(double[] values){
+		double mean = computeTimeOrModalMean(values);
+		if(mean == -1 || Double.isNaN(mean))
+			return -1;
+		double std = computeTimeOrModalStd(values);
+		if(std == -1|| Double.isNaN(std))
+			return -1;
+		double result = 0;
+		for(double each : values){
+			if(each == -1 || Double.isNaN(each))
+				return -1;
+			result+=Math.pow(each-mean, 4);
+		}
+		return result/(values.length*Math.pow(std, 4));
+	}
+	
+	private double computeTimeOrModalSkewness(double[] values){
+		double mean = computeTimeOrModalMean(values);
+		if(mean == -1 || Double.isNaN(mean))
+			return -1;
+		double std = computeTimeOrModalStd(values);
+		if(std == -1|| Double.isNaN(std))
+			return -1;
+		double result = 0;
+		for(double each : values){
+			if(each == -1 || Double.isNaN(each))
+				return -1;
+			result+=Math.pow(each-mean, 3);
+		}
+		return result/(values.length*Math.pow(std, 3));
+	}
+	
+	private double computeTimeOrModalMedian(double[] values){
+		for(int i=0; i<values.length; i++){
+			if(values[i] == -1 || Double.isNaN(values[i])){
+				return -1;
+			}
+		}
+		Arrays.sort(values);
+		if(values.length%2==0)
+			return (values[values.length/2-1]+values[values.length/2])/2.0;
+		else
+			return values[(values.length-1)/2];
+	}
+
+	private double computeTimeOrModalIQR(double[] values){
+		computeTimeOrModalMedian(values);
+		double[] prevSet = Arrays.copyOfRange(values, 0, values.length/2+1);
+		double prevMed = computeTimeOrModalMedian(prevSet);
+		double[] afterSet = Arrays.copyOfRange(values, values.length/2, values.length-1);
+		double afterMed = computeTimeOrModalMedian(afterSet);
+		if(prevMed == -1 || afterMed == -1)
+			return -1;
+		else
+			return afterMed - prevMed;
+	}
+	
+	private double computeTimeOrModalQuadraticScore_Continuous(double[] values, int binSize){
+		double weighted = 0;
+		Arrays.sort(values);
+		double min = this.minmax[0];
+		double max = this.minmax[1];
+		double nonNaN = 0;
+		for(double value : values){
+			if(!Double.isNaN(value) && value!=-1){
+				nonNaN++;
+			}
+		}
+		if(nonNaN == 0)
+			return -1;
+		double[] binArrays = new double[(int) binSize];
+		for(double value : values){
+			if(!Double.isNaN(value) && value!=-1){
+				int index = (int) ((value - min)/(max - min + 1) * binSize);
+				binArrays[index]++;
+			}
+		}
+		for(double each : binArrays){
+			double pr = each / nonNaN;
+			if(pr!=0){
+				weighted+=pr*(1.0-pr);
+			}
+		}
+		return weighted;
+	}
+	
+	private double computeTimeOrModalQuadraticScore_Discrete(double[] values){
+		int type = 4;
+		double[] occurences = new double[type];
+		double weighted = 0;
+		int nonNeg=0;
+		int totalType = 0;
+		for(double value : values){
+			if(value==-1  || Double.isNaN(value))
+				continue;
+//			int level = (int) categorizeScarcity(value);
+			occurences[(int) (value-1)]++;
+			nonNeg++;
+		}
+		if(nonNeg>0){
+			for(int i=0; i<type; i++){
+				if(occurences[i]>0){
+					occurences[i]=occurences[i]/(double)nonNeg;
+					weighted+=occurences[i]*(1.0-occurences[i]);
+					totalType++;
+				}
+			}
+		}
+		else
+			weighted = -1;
+		return weighted;
+	}
+
 	
 }

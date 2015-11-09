@@ -134,7 +134,6 @@ public class TiffParser {
 
 			// get statistical information about tiff
 			double[] dfMinMax = new double[2];
-			hBand.ComputeRasterMinMax(dfMinMax);
 			double[] dfMax = new double[1];
 			double[] dfMean = new double[1];
 			double[] dfstddev = new double[1];
@@ -183,6 +182,20 @@ public class TiffParser {
 			this.data = pixelData;
 			opened = true;
 			return opened;
+	}
+	
+	public void GetMinMax(double[] minmax){
+		minmax[0] = 99999999;
+		minmax[1] = 0;
+		for(int i=0; i<this.size[0]*this.size[1]; i++){
+			double value = this.getData()[i];
+			if(value!=-1 && !Double.isNaN(value)){
+				if(value<minmax[0])
+					minmax[0] = this.getData()[i];
+				if(value>minmax[1])
+					minmax[1] = this.getData()[i];				
+			}
+		}		
 	}
 	
 	public double[] getSize() {

@@ -1,9 +1,11 @@
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 
 import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
@@ -17,48 +19,59 @@ public class Calculator {
 	
 	public static void main(String[] args) throws IOException {
 		Calculator self = new Calculator();
-		String type = args[0];
-		System.out.println("type is : " + type);
-		if(type.contains("Modal"))
-			self.computemodalattr_entries(type);
-		else
-			self.computetimeattr_entries(type);
+		String dataType = args[0];
+		String metricType = args[1];
+		String categorySize = args[2];
+		System.out.println("data type is : " + dataType);
+		if(metricType.contains("Modal"))
+			self.computemodalattr_entries(dataType, metricType, categorySize);
+		else if(metricType.contains("Time"))
+			self.computetimeattr_entries(dataType, metricType, categorySize);
+		else if(metricType.contains("regenerate-scarcity"))
+			self.computescarcity_entries();
 //		String type = "TimeStd";
 //		String type = "ModalMean";
 		
 	}
 	
 	////////////////////////////////////Time Attributes////////////////////////////////////////////////
-	public void computetimeattr_entries(String type){
-		String targetDir = "/work/asu/data/CalculationResults/" + type + "/";
-		String scarcitySrcDir = "/work/asu/data/CalculationResults/Scarcity/";
-		ArrayList<File> allscarcities = new ArrayList<File>();
-		allscarcities = getAllFiles(scarcitySrcDir, allscarcities);
+	public void computetimeattr_entries(String dataType, String metricType, String categorySize) throws FileNotFoundException{
+		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/" + metricType + "/";
+		String srcDir = "/work/asu/data/" + dataType + "/";
+		if(dataType.equals("Runoff"))
+			srcDir = "/work/asu/data/wsupply/BW_1km/historical/";
+		ArrayList<File> allsources = new ArrayList<File>();
+		allsources = getAllFiles(srcDir, allsources);
 		HashMap<String, ArrayList<File>>modal2files = new HashMap<String, ArrayList<File>>();
-		for(File each : allscarcities){
+		for(File each : allsources){
 			String[] name = each.getName().replace(".tif", "").split("_");
-			String[] model = Arrays.copyOfRange(name, 4, name.length-2);
-			String tModal = "";
-			for(String str : model){
-				if(tModal!="")
-					tModal = tModal+"_"+str;
-				else
-					tModal = str;
+			if(!each.getName().contains("ClimMean")){
+				int startIndex = 4;
+				if(!dataType.contains("Scarcity"))
+					startIndex = 0;
+				String[] model = Arrays.copyOfRange(name, startIndex, name.length-2);
+				String tModal = "";
+				for(String str : model){
+					if(tModal!="")
+						tModal = tModal+"_"+str;
+					else
+						tModal = str;
+				}
+				ArrayList<File> files = new ArrayList<File>();
+				if(modal2files.containsKey(tModal))
+					files = modal2files.get(tModal);
+				files.add(each);
+				modal2files.put(tModal, files);
 			}
-			ArrayList<File> files = new ArrayList<File>();
-			if(modal2files.containsKey(tModal))
-				files = modal2files.get(tModal);
-			files.add(each);
-			modal2files.put(tModal, files);
 		}
 		
 		for(String key : modal2files.keySet()){
 			ArrayList<File> files = modal2files.get(key);
-			computeTimeAttr(type, key, files, targetDir);
+			computeTimeAttr(dataType, key, metricType, files, targetDir, categorySize);
 		}
 	}
 	
-	public boolean computeTimeAttr(String type, String modalName, ArrayList<File> files, String targetDir){
+	public boolean computeTimeAttr(String dataType, String key, String metricType, ArrayList<File> files, String targetDir, String categorySize) throws FileNotFoundException{
 		if(files.isEmpty())
 			return false;
 		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
@@ -67,42 +80,70 @@ public class Calculator {
 		double[] sSize = parsers.get(0).getSize();
 		int tgtHeight = (int)sSize[0];
 		int tgtWidth = (int)sSize[1];
-		double[] bufferSet = new double[tgtHeight*tgtWidth];
-		singletypecomputationonscarcity(type, parsers, bufferSet);
-//		write geotiff files
-		String outputfile = targetDir + modalName + "_" + type + ".tif";
-		saveTiff(parsers.get(0), outputfile, bufferSet);
-		return true;
+		if(metricType.contains("Area")){
+			if(dataType.contains("Scarcity"))
+				categorySize = "4";
+			double[] AreaTypeBuffer = new double[Integer.valueOf(categorySize)];
+			computeAreawithoutThreads(dataType, metricType, parsers, AreaTypeBuffer);
+			String targetPath = targetDir + key + "_" + metricType + "_" + categorySize + ".txt";
+			File targetFile = new File(targetPath);
+			if(targetFile.exists()){
+				targetFile.delete();
+			}
+			try (PrintStream out = new PrintStream(new FileOutputStream(targetPath))) {
+				String text  = "";
+				for(int i=0; i<AreaTypeBuffer.length; i++){
+					if(text == "")
+						text += String.valueOf(AreaTypeBuffer[i]);
+					else
+						text = text + " " + String.valueOf(AreaTypeBuffer[i]);
+				}
+			    out.print(text);
+			}
+			return true;
+		}
+		else{
+			double[] bufferSet = new double[tgtHeight*tgtWidth];
+			singletypecomputationonscarcity(dataType, metricType, parsers, bufferSet);
+			String outputfile = targetDir + key + "_" + metricType + ".tif";
+			saveTiff(parsers.get(0), outputfile, bufferSet);
+			return true;			
+		}
+
 	}
 	
 	
 	////////////////////////////////////Modal Attributes////////////////////////////////////////////////
-	public void computemodalattr_entries(String type){
-		String targetDir = "/work/asu/data/CalculationResults/" + type + "/";
-		String scarcitySrcDir = "/work/asu/data/CalculationResults/Scarcity/";
-		ArrayList<File> allscarcities = new ArrayList<File>();
-		allscarcities = getAllFiles(scarcitySrcDir, allscarcities);
+	public void computemodalattr_entries(String dataType, String metricType, String categorySize){
+		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/" + metricType + "/";
+		String srcDir = "/work/asu/data/" + dataType + "/";
+		if(dataType.equals("Runoff"))
+			srcDir = "/work/asu/data/wsupply/BW_1km/historical/";
+		ArrayList<File> allsources = new ArrayList<File>();
+		allsources = getAllFiles(srcDir, allsources);
 		HashMap<String, ArrayList<File>>year2files = new HashMap<String, ArrayList<File>>();
-		for(File each : allscarcities){
+		for(File each : allsources){
 			String[] name = each.getName().replace(".tif", "").split("_");
-			String year = name[name.length-1];
-			if(year2files.containsKey(year)){
-				ArrayList<File> files = year2files.get(year);
-				files.add(each);
-				year2files.put(year, files);
-			}
-			else{
-				ArrayList<File> files = new ArrayList<File>();
-				year2files.put(year, files);
+			if(!each.getName().contains("ClimMean")){
+				String year = name[name.length-1];
+				if(year2files.containsKey(year)){
+					ArrayList<File> files = year2files.get(year);
+					files.add(each);
+					year2files.put(year, files);
+				}
+				else{
+					ArrayList<File> files = new ArrayList<File>();
+					year2files.put(year, files);
+				}
 			}
 		}
 		for(String key : year2files.keySet()){
 			ArrayList<File> files = year2files.get(key);
-			comptueModalAttr(type, files, targetDir);
+			comptueModalAttr(dataType, key, metricType, files, targetDir);
 		}
 	}
 	
-	public boolean comptueModalAttr(String type, ArrayList<File> files, String targetDir){
+	public boolean comptueModalAttr(String dataType, String key, String metricType, ArrayList<File> files, String targetDir){
 		if(files.isEmpty()){
 			System.out.println("Time Mean files are empty!");
 			return false;
@@ -114,10 +155,10 @@ public class Calculator {
 		int tgtHeight = (int)sSize[0];
 		int tgtWidth = (int)sSize[1];
 		double[] bufferSet = new double[tgtHeight*tgtWidth];
-		singletypecomputationonscarcity(type, parsers, bufferSet);
+		singletypecomputationonscarcity(dataType, metricType, parsers, bufferSet);
 //		write geotiff files
-		String partName = files.get(0).getName().replace(".tif", "");
-		String outputfile = targetDir + partName.substring(0, partName.indexOf("historical")) + type + ".tif";
+//		String partName = files.get(0).getName().replace(".tif", "");
+		String outputfile = targetDir + key + "_" + metricType + ".tif";
 		saveTiff(parsers.get(0), outputfile, bufferSet);
 		return true;
 	}
@@ -125,13 +166,24 @@ public class Calculator {
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 	////////////////////////////////////Public Modules////////////////////////////////////////////////
 //	modules for operating calculation based on the type on scarcity files only
-	public boolean singletypecomputationonscarcity(String type, ArrayList<TiffParser> parsers, double[] bufferSet){
+	public boolean singletypecomputationonscarcity(String dataType, String type, ArrayList<TiffParser> parsers, double[] bufferSet){
 		if(parsers.isEmpty()){
 			return false;
 		}
 		double[] sSize = parsers.get(0).getSize();
 		int tgtHeight = (int)sSize[0];
 		int tgtWidth = (int)sSize[1];
+		double[] globalMinmax = {99999999, 0};
+		for(TiffParser parser : parsers){
+			double[] _minmax = new double[2];
+			parser.GetMinMax(_minmax);
+			if(_minmax[0]!=-1 && _minmax[1]!=-1){
+				if(_minmax[0]<globalMinmax[0])
+					globalMinmax[0] = _minmax[0];
+				if(_minmax[1]>globalMinmax[1])
+					globalMinmax[1] = _minmax[1];
+			}
+		}
 		CalcAttributesThread[] statService = new CalcAttributesThread[NUMBER_OF_PROCESSORS];
 		Thread[] statServerThread = new Thread[NUMBER_OF_PROCESSORS];
 		int delta = tgtHeight/NUMBER_OF_PROCESSORS;
@@ -140,7 +192,7 @@ public class Calculator {
 			int h2 = (i+1) * delta;
 			int startIndex = h1 * tgtWidth;
 			int endIndex =  h2 * tgtWidth;
-			statService[i] = new CalcAttributesThread(type, startIndex, endIndex, parsers, bufferSet);
+			statService[i] = new CalcAttributesThread(dataType, type, startIndex, endIndex, parsers, bufferSet, globalMinmax);
 			statServerThread[i] = new Thread(statService[i]);
 			statServerThread[i].start();
 		}
@@ -203,7 +255,9 @@ public class Calculator {
 	    // get all the files from a directory
 	    File[] fList = directory.listFiles();
 	    for (File file : fList) {
-	        if (file.isFile() && file.getName().endsWith(".tif")) {
+	    	String name = file.getName();
+	        if (file.isFile() && name.endsWith(".tif") && !name.contains("MPI-ESM-LR_CCLM") && !name.contains("HadGEM2-ES_CCLM") && !name.contains("EC-EARTH-r12_CCLM")
+					&& !name.contains("CNRM-CM5_CCLM") && !name.contains("EC-EARTH-r3_HIRHAM")) {
 	            files.add(file);
 	        } else if (file.isDirectory()) {
 	        	getAllFiles(file.getAbsolutePath(), files);
@@ -229,13 +283,65 @@ public class Calculator {
 		}
 		return supplyPathList;
 	}
+	
+	//	function for computing the area probabilty without multi-threads
+	public boolean computeAreawithoutThreads(String dataType, String metricType, ArrayList<TiffParser> parsers, double[] categoryBuffer){
+		if(parsers.isEmpty()){
+			return false;
+		}
+		double[] sSize = parsers.get(0).getSize();
+		int tgtHeight = (int)sSize[0];
+		int tgtWidth = (int)sSize[1];
+		double[] globalMinmax = {99999999, 0};
+		for(TiffParser parser : parsers){
+			double[] _minmax = new double[2];
+			parser.GetMinMax(_minmax);
+			if(_minmax[0]!=-1 && _minmax[1]!=-1){
+				if(_minmax[0]<globalMinmax[0])
+					globalMinmax[0] = _minmax[0];
+				if(_minmax[1]>globalMinmax[1])
+					globalMinmax[1] = _minmax[1];
+			}
+		}
+//		double totalArea = 0;
+		for(int h=0; h<tgtHeight; h++){
+			for(int w=0; w<tgtWidth; w++){
+				int index = w + h*tgtWidth;
+				double[] pr = new double[categoryBuffer.length];
+				for(int x=0; x<parsers.size(); x++){
+					double val = parsers.get(x).getData()[index];
+					if(val!=-1 && !Double.isNaN(val)){
+//						totalArea++;
+						if(dataType.contains("Scarcity")){
+							pr[(int) (categorizeScarcity(val)-1)]++;
+						}
+						else{
+							int catIndex = (int) ((val-globalMinmax[0])/(globalMinmax[1]-globalMinmax[0]+1)*categoryBuffer.length);
+							pr[catIndex]++;
+						}
+					}
+				}
+				for(int y=0; y<categoryBuffer.length; y++){
+//					here we assume all pixels would have NaN together or none of them is NaN
+					categoryBuffer[y] += pr[y]/parsers.size();
+				}
+			}
+		}
+
+//		totalArea = totalArea/parsers.size();
+//		for(int i=0; i<categoryBuffer.length; i++){
+//			categoryBuffer[i] = categoryBuffer[i];
+//		}
+		
+		return true;
+	}
 	///////////////////////////////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	
 	////////////////////////////////////Modal mean from original supplies and demand////////////////////////////////////////////////
 	public void computescarcity_entries() throws IOException{
-		String targetDir = "/work/asu/data/CalculationResults/Scarcity/";
+		String targetDir = "/work/asu/data/Scarcity/";
 		String supplySrcDir = "/work/asu/data/wsupply/BW_1km/historical/";
 		String demandSrcDir = "/work/asu/data/wdemand/popden_pred/";
 		ArrayList<File> alldemands = new ArrayList<File>();
@@ -395,5 +501,12 @@ public class Calculator {
 		return true;
 	}
 	
-	
+//	output continuous scarcity value to categories from 1~4
+	private double categorizeScarcity(double scarcity){
+		if(scarcity<=500 && scarcity>=0) {return 1;}
+		else if(scarcity>500 && scarcity<=1000) {return 2;}
+		else if(scarcity>1000 && scarcity<=1700) {return 3;}
+		else if(scarcity>1700)	{return 4;}
+		return -1;
+	}
 }

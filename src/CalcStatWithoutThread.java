@@ -8,7 +8,6 @@ public class CalcStatWithoutThread implements Runnable{
 	private double[] results;
 	private double[] values;
 	private String dataType;
-	private int binSize = 20;
 	private double[] minmax;
 	private String metricType;
 	private double finalValue;
@@ -29,10 +28,11 @@ public class CalcStatWithoutThread implements Runnable{
 		return this.finalValue;
 	}
 	
-	public CalcStatWithoutThread(String dataType, String metricType, double[] minmax){
+	public CalcStatWithoutThread(String dataType, String metricType, double[] minmax, double[] values){
 		this.dataType = dataType;
 		this.minmax = minmax;
 		this.metricType = metricType;
+		this.values = values;
 	}
 	
 	public double computeTimeOrModalMean(double[] values){
@@ -41,7 +41,7 @@ public class CalcStatWithoutThread implements Runnable{
 		if(!dataType.contains("Skewness")){
 			for(double val : values){
 				if(Double.isNaN(val) && val!=-1)
-					return Double.NaN;
+					continue;
 				totalnum++;
 				total+=val;
 			}
@@ -57,7 +57,7 @@ public class CalcStatWithoutThread implements Runnable{
 	
 	public double computeTimeOrModalStd(double[] values){
 		double mean = computeTimeOrModalMean(values);
-		if(mean == -1 || Double.isNaN(mean))
+		if(mean == -1 || mean ==0 || Double.isNaN(mean))
 			return Double.NaN;
 		else{
 			double sqrsum = 0;
@@ -208,16 +208,20 @@ public class CalcStatWithoutThread implements Runnable{
 	}
 	
 	public double computeTimeOrModalMedian(double[] values){
+		ArrayList<Double> newvalues = new ArrayList<Double>();
 		for(int i=0; i<values.length; i++){
 			if(values[i] == -1 || Double.isNaN(values[i])){
-				return Double.NaN;
+				continue;
 			}
+			newvalues.add(values[i]);
 		}
-		Arrays.sort(values);
-		if(values.length%2==0)
-			return (values[values.length/2-1]+values[values.length/2])/2.0;
+		Double[] newvaluesDouble = new Double[newvalues.size()];
+		newvalues.toArray(newvaluesDouble);
+		Arrays.sort(newvaluesDouble);
+		if(newvaluesDouble.length%2==0)
+			return (newvaluesDouble[newvaluesDouble.length/2-1]+newvaluesDouble[newvaluesDouble.length/2])/2.0;
 		else
-			return values[(values.length-1)/2];
+			return newvaluesDouble[(newvaluesDouble.length-1)/2];
 	}
 
 	public double computeTimeOrModalIQR(double[] values){

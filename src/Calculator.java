@@ -71,12 +71,12 @@ public class Calculator {
 			CalcStatWithoutThread[] statService = new CalcStatWithoutThread[metricList.length];
 			Thread[] statServerThread = new Thread[metricList.length];
 			for(int i=0; i<metricList.length; i++){
-				statService[i] = new CalcStatWithoutThread(dataType, metricList[i], minmax);
+				statService[i] = new CalcStatWithoutThread(dataType, metricList[i], minmax, eachparser.getData());
 				statServerThread[i] = new Thread(statService[i]);
 				statServerThread[i].start();
 			}
 			try{
-				for(int i=0; i<NUMBER_OF_PROCESSORS; i++){
+				for(int i=0; i<metricList.length; i++){
 					statServerThread[i].join();
 					System.out.println(i + " Finished~");
 				}
@@ -92,6 +92,7 @@ public class Calculator {
 			} 
 			try(BufferedWriter br = new BufferedWriter(new FileWriter(targetPath))){
 				br.write(text);
+				br.close();
 			}
 		}
 	}

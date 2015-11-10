@@ -16,8 +16,15 @@ public class TiffParser {
 	private double[] data;
 	private double[] size;
 	public boolean parseSuccess = false;
+	private double[] minmax;
 	
-	
+	public double[] getMinmax() {
+		return minmax;
+	}
+
+	public void setMinmax(double[] minmax) {
+		this.minmax = minmax;
+	}
 	private String filePath;
 	private int xoff, yoff, xSize, ySize;
 	private double[] geoInfo;
@@ -88,6 +95,7 @@ public class TiffParser {
 	}
 
 	public boolean parser(){
+		this.minmax = new double[2];
 		boolean opened = false;
 		String fileName_tif = filePath;  
 		gdal.AllRegister();
@@ -175,11 +183,12 @@ public class TiffParser {
 //			this.statistics[2] = dfMean[0];
 //			this.statistics[3] = dfstddev[0];
 			this.data = new double[xSize*ySize];
-			for(int i=0; i<xSize*ySize; i++){
+//			for(int i=0; i<xSize*ySize; i++){
 //				if(pixelData[i]!=0)
 //					System.out.println("data at " + i + " , " +pixelData[i]);
-			}
+//			}
 			this.data = pixelData;
+			this.GetMinMax(this.minmax);
 			opened = true;
 			return opened;
 	}

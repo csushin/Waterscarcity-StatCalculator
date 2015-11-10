@@ -73,7 +73,7 @@ public class CalcModalAttributesThread implements Runnable{
 						}		
 					}
 					else{
-						scarVal = -1;
+						scarVal = Double.NaN;
 					}
 					
 				

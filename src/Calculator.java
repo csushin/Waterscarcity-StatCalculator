@@ -29,9 +29,51 @@ public class Calculator {
 			self.computetimeattr_entries(dataType, metricType, categorySize);
 		else if(metricType.contains("regenerate-scarcity"))
 			self.computescarcity_entries();
+		else if(metricType.contains("Ensemble"))
+			self.computeEnsemble_entries(dataType, metricType, categorySize);
 //		String type = "TimeStd";
 //		String type = "ModalMean";
 		
+	}
+	
+	////////////////////////////////////Spatial Attributes////////////////////////////////////////////////
+	public void computeSpatial_entries(String dataType, String metricType, String sourceType){
+		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/SpatialStat/";
+		String srcBasisDir = "/work/asu/data/CalculationResults/" + dataType + "/TimeMean/";
+		String targetPath = targetDir + metricType + ".txt";
+		ArrayList<File> sources = new ArrayList<File>();
+		sources = getAllFiles(srcBasisDir, sources);
+		if(sources.isEmpty()){
+			System.out.println("source files are empty!");
+			return;
+		}
+		
+		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
+		parsers = parseFilesThread(sources, parsers);
+		
+	}
+	
+	////////////////////////////////////Ensemble Attributes////////////////////////////////////////////////
+	public void computeEnsemble_entries(String dataType, String metricType, String sourceType){
+		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/EnsembleStatOf" + sourceType + "/";
+		String srcBasisDir = "/work/asu/data/CalculationResults/" + dataType + "/" + sourceType + "/";
+		ArrayList<File> sources = new ArrayList<File>();
+		sources = getAllFiles(srcBasisDir, sources);
+		if(sources.isEmpty()){
+			System.out.println("source files are empty!");
+			return;
+		}
+		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
+		parsers = parseFilesThread(sources, parsers);
+		if(parsers.isEmpty()){
+			System.out.println("Parse set is empty!");
+			return;
+		}
+		double[] size = parsers.get(0).getSize();
+		double[] bufferSet = new double[(int) (size[0]*size[1])];
+		singletypecomputationonscarcity(dataType, metricType, parsers, bufferSet);
+		String outputfile = targetDir + metricType + "Of" + sourceType + ".tif";
+		saveTiff(parsers.get(0), outputfile, bufferSet);
 	}
 	
 	////////////////////////////////////Time Attributes////////////////////////////////////////////////
@@ -175,8 +217,7 @@ public class Calculator {
 		int tgtWidth = (int)sSize[1];
 		double[] globalMinmax = {99999999, 0};
 		for(TiffParser parser : parsers){
-			double[] _minmax = new double[2];
-			parser.GetMinMax(_minmax);
+			double[] _minmax = parser.getMinmax();
 			if(_minmax[0]!=-1 && _minmax[1]!=-1){
 				if(_minmax[0]<globalMinmax[0])
 					globalMinmax[0] = _minmax[0];

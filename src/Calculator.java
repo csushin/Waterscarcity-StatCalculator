@@ -1,11 +1,16 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 
 import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
@@ -31,16 +36,18 @@ public class Calculator {
 			self.computescarcity_entries();
 		else if(metricType.contains("Ensemble"))
 			self.computeEnsemble_entries(dataType, metricType, categorySize);
+		else if(metricType.contains("Spatial"))
+			self.computeSpatial_entries(dataType);
 //		String type = "TimeStd";
 //		String type = "ModalMean";
 		
 	}
 	
 	////////////////////////////////////Spatial Attributes////////////////////////////////////////////////
-	public void computeSpatial_entries(String dataType, String metricType, String sourceType){
+	public void computeSpatial_entries(String dataType) throws IOException{
 		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/SpatialStat/";
 		String srcBasisDir = "/work/asu/data/CalculationResults/" + dataType + "/TimeMean/";
-		String targetPath = targetDir + metricType + ".txt";
+		
 		ArrayList<File> sources = new ArrayList<File>();
 		sources = getAllFiles(srcBasisDir, sources);
 		if(sources.isEmpty()){
@@ -50,7 +57,43 @@ public class Calculator {
 		
 		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
 		parsers = parseFilesThread(sources, parsers);
-		
+		if(parsers.isEmpty()){
+			System.out.println("Parse set is empty!");
+			return;
+		}
+		String[] metricList = {"Mean", "Std", "CV", "IQR"};
+		for(TiffParser eachparser : parsers){
+			double[] minmax = eachparser.getMinmax();
+			String[] filename = eachparser.getFilePath().split("/");
+			String modelname = filename[filename.length-1].replace(".tif", "");
+			String targetPath = targetDir + modelname + ".txt";
+			String text = "";
+			CalcStatWithoutThread[] statService = new CalcStatWithoutThread[metricList.length];
+			Thread[] statServerThread = new Thread[metricList.length];
+			for(int i=0; i<metricList.length; i++){
+				statService[i] = new CalcStatWithoutThread(dataType, metricList[i], minmax);
+				statServerThread[i] = new Thread(statService[i]);
+				statServerThread[i].start();
+			}
+			try{
+				for(int i=0; i<NUMBER_OF_PROCESSORS; i++){
+					statServerThread[i].join();
+					System.out.println(i + " Finished~");
+				}
+			} catch (InterruptedException e){
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			for(int i=0; i<metricList.length; i++){
+				if(text == "")
+					text = modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
+				else
+					text += modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
+			} 
+			try(BufferedWriter br = new BufferedWriter(new FileWriter(targetPath))){
+				br.write(text);
+			}
+		}
 	}
 	
 	////////////////////////////////////Ensemble Attributes////////////////////////////////////////////////

@@ -26,6 +26,9 @@ public class TiffParser {
 		this.minmax = minmax;
 	}
 	private String filePath;
+	public String getFilePath() {
+		return filePath;
+	}
 	private int xoff, yoff, xSize, ySize;
 	private double[] geoInfo;
 	private String projRef;

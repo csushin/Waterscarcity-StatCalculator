@@ -70,11 +70,6 @@ public class Calculator {
 		String meanPath = "/work/asu/data/CalculationResults/" + dataType + "/EnsembleStatOfTimeMean/EnsembleMeanOfTimeMean.tif";
 		TiffParser meanparser = new TiffParser(meanPath);
 		double[] meanvalues=  meanparser.getData();
-		int realNum = 0;
-		for(int i=0; i<meanvalues.length; i++){
-			if(meanvalues[i]!=-1 && !Double.isNaN(meanvalues[i]))
-				realNum++;
-		}
 		String srcDir = "/work/asu/data/" + dataType + "/";
 		ArrayList<File> sources = new ArrayList<File>();
 		sources = getAllFiles(srcDir, sources);
@@ -89,10 +84,16 @@ public class Calculator {
 			TiffParser parser = new TiffParser(sources.get(x).getAbsolutePath());
 			for(int i=0; i<tgtHeight*tgtWidth; i++){
 				double value = parser.getData()[i];
-				if(value!=-1 && !Double.isNaN(value)){
+				if(!Double.isNaN(value)){
 					stdvalues[i]+=Math.pow(value-meanvalues[i], 2.0);
-					if(x == sources.size()-1)
+					if(x == sources.size()-1){
 						stdvalues[i]=Math.sqrt(stdvalues[i]/(double)sources.size());
+						if(meanvalues[i]==-1 || Double.isNaN(meanvalues[i]))
+							stdvalues[i] = Double.NaN;
+					}
+				}
+				else{
+					stdvalues[i] = Double.NaN;
 				}
 			}
 			System.out.println("Finished!\n");

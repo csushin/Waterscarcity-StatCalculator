@@ -13,6 +13,7 @@ public class CalcAttributesThread implements Runnable {
 	private String dataType;
 	private int binSize = 20;
 	private double[] minmax;
+	private Object lock1 = new Object();
 	
 	public CalcAttributesThread(String dataType, String type, int startIndex, int endIndex, ArrayList<TiffParser> parsers, double[] bufferSet, double[] minmax){
 		this.type = type;
@@ -75,6 +76,31 @@ public class CalcAttributesThread implements Runnable {
 				else
 					this.results[i] = computeTimeOrModalQuadraticScore_Discrete(scarcities);
 			}
+			if(type.equals("GlobalMean")){
+				synchronized(lock1) {
+					this.results[i] += computecomputeTimeOrModalStd(scarcities, this.minmax[i]);
+				}
+			}
+		}
+		
+	}
+	
+	private double computecomputeTimeOrModalStd(double[] values, double mean){
+		if(mean == -1 || Double.isNaN(mean))
+			return Double.NaN;
+		else{
+			double sqrsum = 0;
+			double nonneg = 0;
+			for(int i=0; i<values.length; i++){
+				if(values[i] != -1 && !Double.isNaN(values[i])){
+					nonneg++;
+					sqrsum+= Math.pow(values[i]-mean, 2.0);
+				}
+			}
+			if(nonneg == 0)
+				return Double.NaN;
+			else
+				return sqrsum;	
 		}
 	}
 	
@@ -244,7 +270,7 @@ public class CalcAttributesThread implements Runnable {
 		double result = 0;
 		for(double each : values){
 			if(each == -1 || Double.isNaN(each))
-				return Double.NaN;
+				continue;
 			result+=Math.pow(each-mean, 3);
 		}
 		return result/(values.length*Math.pow(std, 3));

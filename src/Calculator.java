@@ -38,8 +38,90 @@ public class Calculator {
 			self.computeEnsemble_entries(dataType, metricType, categorySize);
 		else if(metricType.contains("Spatial"))
 			self.computeSpatial_entries(dataType);
+		else if(metricType.contains("GetMinMax"))
+			self.GetGlobalMinMax(dataType, categorySize);
+		else if(metricType.contains("Global"))
+			self.GetGlobalStat(dataType, metricType);
 //		String type = "TimeStd";
 //		String type = "ModalMean";
+		
+	}
+	
+	
+	////////////////////////////////////Other services////////////////////////////////////////////////
+	public void GetGlobalMinMax(String dataType, String metricType){
+		String srcBasisDir = "/work/asu/data/CalculationResults/" + dataType + "/" + metricType + "/";
+		ArrayList<File> sources = new ArrayList<File>();
+		sources = getAllFiles(srcBasisDir, sources);
+		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
+		parsers = parseFilesThread(sources, parsers);
+		double[] globalminmax = {999999999, 0};
+		for(TiffParser eachparser : parsers){
+			double[] minmax = eachparser.getMinmax();
+			if(globalminmax[0] > minmax[0])
+				globalminmax[0] = minmax[0];
+			if(globalminmax[1] < minmax[1])
+				globalminmax[1] = minmax[1];
+		}
+		System.out.println("dataType is: " + dataType + " min is : " + globalminmax[0] + " max is: " + globalminmax[1]);
+	}
+	
+	public void GetGlobalStat(String dataType, String metricType){
+		String meanPath = "/work/asu/data/CalculationResults/" + dataType + "/EnsembleStatOfTimeMean/EnsembleMeanOfTimeMean.tif";
+		TiffParser meanparser = new TiffParser(meanPath);
+		double[] meanvalues=  meanparser.getData();
+		int realNum = 0;
+		for(int i=0; i<meanvalues.length; i++){
+			if(meanvalues[i]!=-1 && !Double.isNaN(meanvalues[i]))
+				realNum++;
+		}
+		String srcDir = "/work/asu/data/" + dataType + "/";
+		ArrayList<File> sources = new ArrayList<File>();
+		sources = getAllFiles(srcDir, sources);
+//		ArrayList<TiffParser> parsers = new ArrayList<TiffParser>();
+//		parsers = parseFilesThread(sources, parsers);
+		double[] stdvalues = new double[meanvalues.length];
+		TiffParser _parser = new TiffParser(sources.get(0).getAbsolutePath());
+		double[] sSize = _parser.getSize();
+		int tgtHeight = (int)sSize[0];
+		int tgtWidth = (int)sSize[1];
+		for(int x=0; x<sources.size(); x++){
+			TiffParser parser = new TiffParser(sources.get(x).getAbsolutePath());
+			for(int i=0; i<tgtHeight*tgtWidth; i++){
+				double value = parser.getData()[i];
+				if(value!=-1 && !Double.isNaN(value)){
+					stdvalues[i]+=Math.pow(value-meanvalues[i], 2.0);
+					if(x == sources.size()-1)
+						stdvalues[i]=Math.sqrt(stdvalues[i]/(double)sources.size());
+				}
+			}
+			System.out.println("Finished!\n");
+//			CalcAttributesThread[] statService = new CalcAttributesThread[NUMBER_OF_PROCESSORS];
+//			Thread[] statServerThread = new Thread[NUMBER_OF_PROCESSORS];
+//			int delta = tgtHeight/NUMBER_OF_PROCESSORS;
+//			ArrayList<TiffParser> temp = new ArrayList<TiffParser>();
+//			temp.add(eachparser);
+//			for(int i=0; i<NUMBER_OF_PROCESSORS; i++){
+//				int h1 = i * delta;
+//				int h2 = (i+1) * delta;
+//				int startIndex = h1 * tgtWidth;
+//				int endIndex =  h2 * tgtWidth;
+//				statService[i] = new CalcAttributesThread(dataType, metricType, startIndex, endIndex, temp, stdvalues, meanvalues);
+//				statServerThread[i] = new Thread(statService[i]);
+//				statServerThread[i].start();
+//			}
+//			try{
+//				for(int i=0; i<NUMBER_OF_PROCESSORS; i++){
+//					statServerThread[i].join();
+//					System.out.println(i + " Finished~");
+//				}
+//			} catch (InterruptedException e){
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+		}
+		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/GlobleStat/" + metricType + ".tif";
+		saveTiff(_parser, targetDir, stdvalues);
 		
 	}
 	
@@ -63,37 +145,37 @@ public class Calculator {
 		}
 		String[] metricList = {"Mean", "Std", "CV", "IQR"};
 		for(TiffParser eachparser : parsers){
-			double[] minmax = eachparser.getMinmax();
-			String[] filename = eachparser.getFilePath().split("/");
-			String modelname = filename[filename.length-1].replace(".tif", "");
-			String targetPath = targetDir + modelname + ".txt";
-			String text = "";
-			CalcStatWithoutThread[] statService = new CalcStatWithoutThread[metricList.length];
-			Thread[] statServerThread = new Thread[metricList.length];
-			for(int i=0; i<metricList.length; i++){
-				statService[i] = new CalcStatWithoutThread(dataType, metricList[i], minmax, eachparser.getData());
-				statServerThread[i] = new Thread(statService[i]);
-				statServerThread[i].start();
-			}
-			try{
+				double[] minmax = eachparser.getMinmax();
+				String[] filename = eachparser.getFilePath().split("/");
+				String modelname = filename[filename.length-1].replace(".tif", "");
+				String targetPath = targetDir + modelname + ".txt";
+				String text = "";
+				CalcStatWithoutThread[] statService = new CalcStatWithoutThread[metricList.length];
+				Thread[] statServerThread = new Thread[metricList.length];
 				for(int i=0; i<metricList.length; i++){
-					statServerThread[i].join();
-					System.out.println(i + " Finished~");
+					statService[i] = new CalcStatWithoutThread(dataType, metricList[i], minmax, eachparser.getData());
+					statServerThread[i] = new Thread(statService[i]);
+					statServerThread[i].start();
 				}
-			} catch (InterruptedException e){
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			for(int i=0; i<metricList.length; i++){
-				if(text == "")
-					text = modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
-				else
-					text += modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
-			} 
-			try(BufferedWriter br = new BufferedWriter(new FileWriter(targetPath))){
-				br.write(text);
-				br.close();
-			}
+				try{
+					for(int i=0; i<metricList.length; i++){
+						statServerThread[i].join();
+						System.out.println(i + " Finished~");
+					}
+				} catch (InterruptedException e){
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				for(int i=0; i<metricList.length; i++){
+					if(text == "")
+						text = modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
+					else
+						text += modelname + " " + metricList[i] + " " + String.valueOf(statService[i].getResult()) + "\n";
+				} 
+				try(BufferedWriter br = new BufferedWriter(new FileWriter(targetPath))){
+					br.write(text);
+					br.close();
+				}
 		}
 	}
 	
@@ -153,7 +235,8 @@ public class Calculator {
 		
 		for(String key : modal2files.keySet()){
 			ArrayList<File> files = modal2files.get(key);
-			computeTimeAttr(dataType, key, metricType, files, targetDir, categorySize);
+			if(key.contains("MOHC-HadGEM2-ES_KNMI-RACMO22T"))
+				computeTimeAttr(dataType, key, metricType, files, targetDir, categorySize);
 		}
 	}
 	

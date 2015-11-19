@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 
 import org.gdal.gdal.Dataset;
 import org.gdal.gdal.Driver;
@@ -42,9 +43,20 @@ public class Calculator {
 			self.GetGlobalMinMax(dataType, categorySize);
 		else if(metricType.contains("Global"))
 			self.GetGlobalStat(dataType, metricType);
+		else if(metricType.contains("Test"))
+			self.TestFunction();
 //		String type = "TimeStd";
 //		String type = "ModalMean";
 		
+	}
+	
+	public void TestFunction(){
+		long start = System.nanoTime();
+		TiffParser parser = new TiffParser("/work/asu/data/CalculationResults/pr_HIST/TimeMean/historical_CCCma-CanESM2_CCCma-CanRCM4_r2_TimeMean.tif");
+		int count = 0;
+		long end0 = System.nanoTime();
+		System.out.println("Time used for parsing files: " + TimeUnit.NANOSECONDS.toMillis(end0-start)+" ms");
+		System.out.println("Max and min is " + parser.getMinmax()[0] + "," + parser.getMinmax()[1]);
 	}
 	
 	
@@ -144,7 +156,7 @@ public class Calculator {
 			System.out.println("Parse set is empty!");
 			return;
 		}
-		String[] metricList = {"Mean", "Std", "CV", "IQR"};
+		String[] metricList = {"Mean", "Std", "CV", "IQR", "Skewness", "Kurtosis", "Entropy", "QuadraticScore"};
 		for(TiffParser eachparser : parsers){
 				double[] minmax = eachparser.getMinmax();
 				String[] filename = eachparser.getFilePath().split("/");
@@ -203,6 +215,8 @@ public class Calculator {
 		saveTiff(parsers.get(0), outputfile, bufferSet);
 	}
 	
+
+	
 	////////////////////////////////////Time Attributes////////////////////////////////////////////////
 	public void computetimeattr_entries(String dataType, String metricType, String categorySize) throws FileNotFoundException{
 		String targetDir = "/work/asu/data/CalculationResults/" + dataType + "/" + metricType + "/";
@@ -236,8 +250,7 @@ public class Calculator {
 		
 		for(String key : modal2files.keySet()){
 			ArrayList<File> files = modal2files.get(key);
-			if(key.contains("MOHC-HadGEM2-ES_KNMI-RACMO22T"))
-				computeTimeAttr(dataType, key, metricType, files, targetDir, categorySize);
+			computeTimeAttr(dataType, key, metricType, files, targetDir, categorySize);
 		}
 	}
 	
@@ -430,6 +443,24 @@ public class Calculator {
 	            files.add(file);
 	        } else if (file.isDirectory()) {
 	        	getAllFiles(file.getAbsolutePath(), files);
+	        }
+	    }
+	    return files;
+	}
+	
+	// module for getting all files within keywords
+	public ArrayList<File> getAllFiles(String directoryName, ArrayList<File> files, String keyword) {
+	    File directory = new File(directoryName);
+
+	    // get all the files from a directory
+	    File[] fList = directory.listFiles();
+	    for (File file : fList) {
+	    	String name = file.getName();
+	        if (file.isFile() && name.endsWith(".tif") && !name.contains("MPI-ESM-LR_CCLM") && !name.contains("HadGEM2-ES_CCLM") && !name.contains("EC-EARTH-r12_CCLM")
+					&& !name.contains("CNRM-CM5_CCLM") && !name.contains("EC-EARTH-r3_HIRHAM")&& name.contains(keyword)) {
+	            files.add(file);
+	        } else if (file.isDirectory()) {
+	        	getAllFiles(file.getAbsolutePath(), files, keyword);
 	        }
 	    }
 	    return files;

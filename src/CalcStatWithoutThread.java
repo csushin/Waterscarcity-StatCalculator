@@ -11,6 +11,7 @@ public class CalcStatWithoutThread implements Runnable{
 	private double[] minmax;
 	private String metricType;
 	private double finalValue;
+	private int binSize = 20;
 	
 	@Override
 	public void run() {
@@ -22,6 +23,23 @@ public class CalcStatWithoutThread implements Runnable{
 			this.finalValue = this.computeTimeOrModalCV(this.values);
 		else if(this.metricType.contains("IQR"))
 			this.finalValue = this.computeTimeOrModalIQR(this.values);
+		else if(this.metricType.contains("Skewness"))
+			this.finalValue = this.computeTimeOrModalSkewness(this.values);
+		else if(this.metricType.contains("Kurtosis"))
+			this.finalValue = this.computeTimeOrModalKurtosis(this.values);
+		else if(this.metricType.contains("Entropy")){
+			if(this.dataType.contains("Scarcity"))
+				this.finalValue = this.computeTimeOrModalCategoricalEntropy(this.values);
+			else
+				this.finalValue = this.computeTimeOrModalBinEntropy(this.values, this.binSize);
+		}
+		else if(this.metricType.contains("QuadraticScore")){
+			if(this.dataType.contains("Scarcity"))
+				this.finalValue = this.computeTimeOrModalQuadraticScore_Discrete(this.values);
+			else
+				this.finalValue = this.computeTimeOrModalQuadraticScore_Continuous(this.values, this.binSize);
+		}
+			
 	}
 	
 	public double getResult(){
@@ -38,7 +56,7 @@ public class CalcStatWithoutThread implements Runnable{
 	public double computeTimeOrModalMean(double[] values){
 		double total = 0;
 		double totalnum = 0;
-		if(!dataType.contains("Skewness")){
+//		if(!dataType.contains("Skewness")){
 			for(double val : values){
 				if(Double.isNaN(val) && val!=-1)
 					continue;
@@ -49,10 +67,10 @@ public class CalcStatWithoutThread implements Runnable{
 				return Double.NaN;
 			else 
 				return total/totalnum;			
-		}
-		else{
-			return Double.NaN;
-		}
+//		}
+//		else{
+//			return Double.NaN;
+//		}
 	}
 	
 	public double computeTimeOrModalStd(double[] values){
@@ -77,11 +95,20 @@ public class CalcStatWithoutThread implements Runnable{
 	
 	public double computeTimeOrModalBinEntropy(double[] values, int binSize){
 		double entropy = 0;
-		Arrays.sort(values);
+		ArrayList<Double> newvalues = new ArrayList<Double>();
+		for(int i=0; i<values.length; i++){
+			if(values[i] == -1 || Double.isNaN(values[i])){
+				continue;
+			}
+			newvalues.add(values[i]);
+		}
+		Double[] newvaluesDouble = new Double[newvalues.size()];
+		newvalues.toArray(newvaluesDouble);
+		Arrays.sort(newvaluesDouble);
 		double min = this.minmax[0];
 		double max = this.minmax[1];
 		double nonNaN = 0;
-		for(double value : values){
+		for(double value : newvaluesDouble){
 			if(!Double.isNaN(value) && value!=-1){
 				nonNaN++;
 			}
@@ -90,7 +117,7 @@ public class CalcStatWithoutThread implements Runnable{
 			return Double.NaN;
 		double interval = (max - min + 1)/binSize;
 		double[] binArrays = new double[(int) binSize];
-		for(double value : values){
+		for(double value : newvaluesDouble){
 			if(!Double.isNaN(value) && value!=-1){
 				int index = (int) ((value - min)/interval);
 				binArrays[index]++;
@@ -181,11 +208,11 @@ public class CalcStatWithoutThread implements Runnable{
 			return Double.NaN;
 		double std = computeTimeOrModalStd(values);
 		if(std == -1|| Double.isNaN(std))
-			return -Double.NaN;
+			return Double.NaN;
 		double result = 0;
 		for(double each : values){
 			if(each == -1 || Double.isNaN(each))
-				return Double.NaN;
+				continue;
 			result+=Math.pow(each-mean, 4);
 		}
 		return result/(values.length*Math.pow(std, 4));
@@ -201,7 +228,7 @@ public class CalcStatWithoutThread implements Runnable{
 		double result = 0;
 		for(double each : values){
 			if(each == -1 || Double.isNaN(each))
-				return Double.NaN;
+				continue;
 			result+=Math.pow(each-mean, 3);
 		}
 		return result/(values.length*Math.pow(std, 3));
@@ -238,11 +265,20 @@ public class CalcStatWithoutThread implements Runnable{
 	
 	public double computeTimeOrModalQuadraticScore_Continuous(double[] values, int binSize){
 		double weighted = 0;
-		Arrays.sort(values);
 		double min = this.minmax[0];
 		double max = this.minmax[1];
 		double nonNaN = 0;
-		for(double value : values){
+		ArrayList<Double> newvalues = new ArrayList<Double>();
+		for(int i=0; i<values.length; i++){
+			if(values[i] == -1 || Double.isNaN(values[i])){
+				continue;
+			}
+			newvalues.add(values[i]);
+		}
+		Double[] newvaluesDouble = new Double[newvalues.size()];
+		newvalues.toArray(newvaluesDouble);
+		Arrays.sort(newvaluesDouble);
+		for(double value : newvaluesDouble){
 			if(!Double.isNaN(value) && value!=-1){
 				nonNaN++;
 			}
@@ -250,7 +286,7 @@ public class CalcStatWithoutThread implements Runnable{
 		if(nonNaN == 0)
 			return Double.NaN;
 		double[] binArrays = new double[(int) binSize];
-		for(double value : values){
+		for(double value : newvaluesDouble){
 			if(!Double.isNaN(value) && value!=-1){
 				int index = (int) ((value - min)/(max - min + 1) * binSize);
 				binArrays[index]++;

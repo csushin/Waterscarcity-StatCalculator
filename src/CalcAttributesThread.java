@@ -38,7 +38,10 @@ public class CalcAttributesThread implements Runnable {
 					scarcities[k] = categorizeScarcity(scarcities[k]);
 			}
 			if(type.equals("ModalMean") || type.equals("TimeMean") || type.equals("EnsembleMean")){
-				this.results[i] = computeTimeOrModalMean(scarcities);
+				if(dataType.equals("Scarcity"))
+					this.results[i] = computeTimeOrModalMean(scarcities);
+				else
+					this.results[i] = computeTimeOrModalMean(scarcities);
 			}
 			if(type.equals("ModalStd") || type.equals("TimeStd") || type.equals("EnsembleStd")){
 				this.results[i] = computeTimeOrModalStd(scarcities);
@@ -104,24 +107,44 @@ public class CalcAttributesThread implements Runnable {
 		}
 	}
 	
+	private double computeTimeOrModalCategoricalMean(double[] values){
+		double total = 0;
+		double count = 0;
+//		if(!dataType.contains("Skewness")){
+		for(double val : values){
+			if(Double.isNaN(val) || val == -1)
+				continue;
+			count++;
+			total+=val;
+		}
+		if(count == 0)
+			return Double.NaN;
+		else 
+			return Math.floor(total/count);			
+//		}
+//		else{
+//			return Double.NaN;
+//		}
+	}
+	
 	private double computeTimeOrModalMean(double[] values){
 		double total = 0;
-		double totalnum = 0;
-		if(!dataType.contains("Skewness")){
-			for(double val : values){
-				if(Double.isNaN(val) && val!=-1)
-					return Double.NaN;
-				totalnum++;
-				total+=val;
-			}
-			if(totalnum == 0)
-				return Double.NaN;
-			else 
-				return total/totalnum;			
+		double count = 0;
+//		if(!dataType.contains("Skewness")){
+		for(double val : values){
+			if(Double.isNaN(val) || val == -1)
+				continue;
+			count++;
+			total+=val;
 		}
-		else{
+		if(count == 0)
 			return Double.NaN;
-		}
+		else 
+			return total/count;			
+//		}
+//		else{
+//			return Double.NaN;
+//		}
 	}
 	
 	private double computeTimeOrModalStd(double[] values){
@@ -130,17 +153,17 @@ public class CalcAttributesThread implements Runnable {
 			return Double.NaN;
 		else{
 			double sqrsum = 0;
-			double nonneg = 0;
+			double count = 0;
 			for(int i=0; i<values.length; i++){
 				if(values[i] != -1 && !Double.isNaN(values[i])){
-					nonneg++;
+					count++;
 					sqrsum+= Math.pow(values[i]-mean, 2.0);
 				}
 			}
-			if(nonneg == 0)
+			if(count == 0)
 				return Double.NaN;
 			else
-				return Math.sqrt(sqrsum/nonneg);	
+				return Math.sqrt(sqrsum/count);	
 		}
 	}
 	
@@ -154,6 +177,8 @@ public class CalcAttributesThread implements Runnable {
 			if(!Double.isNaN(value) && value!=-1){
 				nonNaN++;
 			}
+			else
+				continue;
 		}
 		if(nonNaN == 0)
 			return Double.NaN;
@@ -252,12 +277,17 @@ public class CalcAttributesThread implements Runnable {
 		if(std == -1|| Double.isNaN(std))
 			return -Double.NaN;
 		double result = 0;
+		double count = 0;
 		for(double each : values){
 			if(each == -1 || Double.isNaN(each))
-				return Double.NaN;
+				continue;
+			count++;
 			result+=Math.pow(each-mean, 4);
 		}
-		return result/(values.length*Math.pow(std, 4));
+		if(count == 0)
+			return Double.NaN;
+		else
+			return result/(values.length*Math.pow(std, 4));
 	}
 	
 	private double computeTimeOrModalSkewness(double[] values){
@@ -268,18 +298,23 @@ public class CalcAttributesThread implements Runnable {
 		if(std == -1|| Double.isNaN(std))
 			return Double.NaN;
 		double result = 0;
+		double count = 0;
 		for(double each : values){
 			if(each == -1 || Double.isNaN(each))
 				continue;
+			count++;
 			result+=Math.pow(each-mean, 3);
 		}
-		return result/(values.length*Math.pow(std, 3));
-	}
+		if(count == 0)
+			return Double.NaN;
+		else
+			return result/(values.length*Math.pow(std, 3));
+	}	
 	
 	private double computeTimeOrModalMedian(double[] values){
 		for(int i=0; i<values.length; i++){
 			if(values[i] == -1 || Double.isNaN(values[i])){
-				return Double.NaN;
+				continue;
 			}
 		}
 		Arrays.sort(values);
